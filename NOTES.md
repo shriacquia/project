@@ -119,3 +119,60 @@
 
  5. Implementing the controller:
     We need to list all the possible (english) states that an `Ide` could be in, and understand upfron on what should we be doing about it.
+
+
+
+
+# Miscellaneous:
+Ch 1.9.0: Make Docker build commands
+```java
+make docker-build IMG=localhost/kubebuilder-cronjob-tutorial:1.9.0-1
+```
+
+Ch 1.9.0: If your `make deploy` fails with this error:
+```java
+❯ make deploy
+test -s /Users/shrinidhijahagirdar/Repos/k8s/project/bin/controller-gen && /Users/shrinidhijahagirdar/Repos/k8s/project/bin/controller-gen --version | grep -q v0.11.1 || \
+	GOBIN=/Users/shrinidhijahagirdar/Repos/k8s/project/bin go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.11.1
+/Users/shrinidhijahagirdar/Repos/k8s/project/bin/controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+test -s /Users/shrinidhijahagirdar/Repos/k8s/project/bin/kustomize || { curl -Ss "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- 3.8.7 /Users/shrinidhijahagirdar/Repos/k8s/project/bin; }
+make: *** [/Users/shrinidhijahagirdar/Repos/k8s/project/bin/kustomize] Killed: 9
+```
+..I've got a solution for you, and better yet..the reason (somewhat).
+[#6219](https://github.com/operator-framework/operator-sdk/issues/6219) - Is the reason. `make` checks if `project/bin` director is newer than `project/bin/kustomize` and if it is, it tries to `curl` get the installer and install it via bash script, which somehow doesn't play well. 
+How to fix it? Now, its not really a fix, but make the `project/bin/kustomize` newer than bin director. I installed `kustomize` again to overcome.
+
+Ch 1.9.0: After `make deploy` check the logs of the controller in the `project-system` namespace. You'll find this erro:
+```java
+❯ k -n project-system logs pod/project-controller-manager-8684c6d4df-s7c6x
+2023-04-13T18:56:36Z	INFO	controller-runtime.metrics	Metrics server is starting to listen	{"addr": "127.0.0.1:8080"}
+2023-04-13T18:56:36Z	INFO	controller-runtime.builder	Registering a mutating webhook	{"GVK": "batch.tutorial.kubebuilder.io/v1, Kind=CronJob", "path": "/mutate-batch-tutorial-kubebuilder-io-v1-cronjob"}
+2023-04-13T18:56:36Z	INFO	controller-runtime.webhook	Registering webhook	{"path": "/mutate-batch-tutorial-kubebuilder-io-v1-cronjob"}
+2023-04-13T18:56:36Z	INFO	controller-runtime.builder	Registering a validating webhook	{"GVK": "batch.tutorial.kubebuilder.io/v1, Kind=CronJob", "path": "/validate-batch-tutorial-kubebuilder-io-v1-cronjob"}
+2023-04-13T18:56:36Z	INFO	controller-runtime.webhook	Registering webhook	{"path": "/validate-batch-tutorial-kubebuilder-io-v1-cronjob"}
+2023-04-13T18:56:36Z	INFO	setup	starting manager
+2023-04-13T18:56:36Z	INFO	controller-runtime.webhook.webhooks	Starting webhook server
+2023-04-13T18:56:36Z	INFO	Starting server	{"path": "/metrics", "kind": "metrics", "addr": "127.0.0.1:8080"}
+2023-04-13T18:56:36Z	INFO	Starting server	{"kind": "health probe", "addr": "[::]:8081"}
+2023-04-13T18:56:36Z	INFO	Stopping and waiting for non leader election runnables
+2023-04-13T18:56:36Z	INFO	Stopping and waiting for leader election runnables
+I0413 18:56:36.105193       1 leaderelection.go:248] attempting to acquire leader lease project-system/80807133.tutorial.kubebuilder.io...
+2023-04-13T18:56:36Z	INFO	Starting EventSource	{"controller": "cronjob", "controllerGroup": "batch.tutorial.kubebuilder.io", "controllerKind": "CronJob", "source": "kind source: *v1.CronJob"}
+2023-04-13T18:56:36Z	INFO	Starting EventSource	{"controller": "cronjob", "controllerGroup": "batch.tutorial.kubebuilder.io", "controllerKind": "CronJob", "source": "kind source: *v1.Job"}
+2023-04-13T18:56:36Z	INFO	Starting Controller	{"controller": "cronjob", "controllerGroup": "batch.tutorial.kubebuilder.io", "controllerKind": "CronJob"}
+2023-04-13T18:56:36Z	INFO	Starting workers	{"controller": "cronjob", "controllerGroup": "batch.tutorial.kubebuilder.io", "controllerKind": "CronJob", "worker count": 1}
+2023-04-13T18:56:36Z	INFO	Shutdown signal received, waiting for all workers to finish	{"controller": "cronjob", "controllerGroup": "batch.tutorial.kubebuilder.io", "controllerKind": "CronJob"}
+2023-04-13T18:56:36Z	INFO	All workers finished	{"controller": "cronjob", "controllerGroup": "batch.tutorial.kubebuilder.io", "controllerKind": "CronJob"}
+2023-04-13T18:56:36Z	INFO	Stopping and waiting for caches
+2023-04-13T18:56:36Z	INFO	Stopping and waiting for webhooks
+2023-04-13T18:56:36Z	INFO	Wait completed, proceeding to shutdown the manager
+E0413 18:56:36.106240       1 leaderelection.go:330] error retrieving resource lock project-system/80807133.tutorial.kubebuilder.io: Get "https://10.96.0.1:443/apis/coordination.k8s.io/v1/namespaces/project-system/leases/80807133.tutorial.kubebuilder.io": context canceled
+2023-04-13T18:56:36Z	ERROR	setup	problem running manager	{"error": "open /tmp/k8s-webhook-server/serving-certs/tls.crt: no such file or directory"}
+main.main
+	/workspace/main.go:130
+runtime.main
+	/usr/local/go/src/runtime/proc.go:250
+```
+
+This is because the `main.go:106` checks for `os.getEnv("ENABLE_WEBHOOKS")` which we never passed on to the container. **IF YOU MUST** then a way you could do that is by setting an `ENV` command in the `Dockerfile` with `ENABLE_WEBHOOKS=false` somewhere before the `ENTRYPOINT`. I didn't do it and moved on to the `cert-manager`. The `controller` runs with the `make run` command locally where it gets the `ENABLE_WEBHOOKS=false` hence there is no issue with the container. Moving on..
+
