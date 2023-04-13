@@ -124,12 +124,12 @@
 
 
 # Miscellaneous:
-Ch 1.9.0: Make Docker build commands
+## Ch 1.9.0: Make Docker build commands
 ```java
 make docker-build IMG=localhost/kubebuilder-cronjob-tutorial:1.9.0-1
 ```
 
-Ch 1.9.0: If your `make deploy` fails with this error:
+## Ch 1.9.0: If your `make deploy` fails with this error:
 ```java
 ❯ make deploy
 test -s /Users/shrinidhijahagirdar/Repos/k8s/project/bin/controller-gen && /Users/shrinidhijahagirdar/Repos/k8s/project/bin/controller-gen --version | grep -q v0.11.1 || \
@@ -142,7 +142,7 @@ make: *** [/Users/shrinidhijahagirdar/Repos/k8s/project/bin/kustomize] Killed: 9
 [#6219](https://github.com/operator-framework/operator-sdk/issues/6219) - Is the reason. `make` checks if `project/bin` director is newer than `project/bin/kustomize` and if it is, it tries to `curl` get the installer and install it via bash script, which somehow doesn't play well. 
 How to fix it? Now, its not really a fix, but make the `project/bin/kustomize` newer than bin director. I installed `kustomize` again to overcome.
 
-Ch 1.9.0: After `make deploy` check the logs of the controller in the `project-system` namespace. You'll find this erro:
+## Ch 1.9.0: After `make deploy` check the logs of the controller in the `project-system` namespace. You'll find this erro:
 ```java
 ❯ k -n project-system logs pod/project-controller-manager-8684c6d4df-s7c6x
 2023-04-13T18:56:36Z	INFO	controller-runtime.metrics	Metrics server is starting to listen	{"addr": "127.0.0.1:8080"}
@@ -175,4 +175,12 @@ runtime.main
 ```
 
 This is because the `main.go:106` checks for `os.getEnv("ENABLE_WEBHOOKS")` which we never passed on to the container. **IF YOU MUST** then a way you could do that is by setting an `ENV` command in the `Dockerfile` with `ENABLE_WEBHOOKS=false` somewhere before the `ENTRYPOINT`. I didn't do it and moved on to the `cert-manager`. The `controller` runs with the `make run` command locally where it gets the `ENABLE_WEBHOOKS=false` hence there is no issue with the container. Moving on..
+
+## Ch 1.9.1: Install `cert-manager`
+Key: Don't overthink this! KISS
+```java
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.11.0 --set installCRDs=true
+```
+
+## Ch 1.9.2: Deploying Admission Webhooks
 
