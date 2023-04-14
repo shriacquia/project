@@ -184,7 +184,8 @@ helm install cert-manager jetstack/cert-manager --namespace cert-manager --creat
 
 ## Ch 1.9.2: Deploying Admission Webhooks
 
-### Deploying `kind` Cluster
+### Deploying `kind` Cluster 
+(eventually didn't use Kind cluster, so you may skip this. I was facing issues with installation of cert-manager in the kind cluster due to imagePull issues)
 ```java
 ❯ kind create cluster --config=kind-config.yaml --image=kindest/node:v1.25.3
 Creating cluster "whook-cluster" ...
