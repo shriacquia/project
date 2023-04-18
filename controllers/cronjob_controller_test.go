@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -92,6 +93,82 @@ var _ = Describe("CronJob controller", func() {
 			}, timeout, interval).Should(BeTrue())
 			// Let's make sure our Schedule string value was properly converted/handled.
 			Expect(createdCronjob.Spec.Schedule).Should(Equal("1 * * * *"))
+
+			/*
+				Now that we've created a CronJob in our test cluster, the next step is to write a test that actually tests
+				our CronJob controller's behaviour. Let's test the CronJob controller's logic responsible for updating
+				`CronJob.Status.Active` with actively running jobs. We'll verify that when a CronJob has a single active
+				downstream `Job`, its `CronJob.Status.Active` contains a reference to this Job.
+
+				First, we should get the test CronJob we created earlier, and verify that it currently doesn't have any
+				active jobs. We use Gomega's `Consistently()` check here to ensure that the active job count remains 0
+				over a duration of time.
+			*/
+			By("By checking the CronJob has zero acive Jobs")
+			Consistently(func() (int, error) {
+				err := k8sClient.Get(ctx, cronjobLookupKey, createdCronjob)
+				if err != nil {
+					return -1, err
+				}
+				return len(createdCronjob.Status.Active), nil
+			}, duration, interval).Should(Equal(0))
+
+			/*
+			Next, we actuall create a stubbed Job that will belong to our CronJob, as well as its downstream template specs.
+			We set the Job's statu "Active" count to 2 to simulate the Job running 2 pods, which means the Job is actively
+			running.
+			We then take the stubbed Job and set its owner reference to point to our test CronJob, This ensures that the 
+			test Job belongs to, and is tracked by, our test CronJob. Once that's done, we create our new Job instance.
+			*/
+			By("By creating a new Job")
+			testJob := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: JobName,
+					Namespace: CronJobNamespace,
+				},
+				Spec: batchv1.JobSpec{
+					Template: v1.PodTemplateSpec{
+						Spec: v1.PodSpec{
+							//For simplicity we only fill out the required fields.
+							Containers: []v1.Container{
+								Name: "test-container"
+								Image: "test-image"
+							},
+							RestartPolicy: v1.RestartPolicyOnFailure,
+						},
+					},
+				},
+				Status: batchv1.JobStatus{
+					Active: 2,
+				},
+			}
+
+			// Not that your CronJob's GroupVersionKind is required to set up this owner reference.
+			kind := reflect.TypeOf(cronjobv1.CronJob()).Name()
+			gvk	 := cronjobv1.GroupVersion.WithKind(kind)
+
+			controllerRef := metav1.NewControllerRef(createdCronjob, gvk)
+			testJob.SetOwnerReferences([]metav1.OwnerReference{*controllerRef})
+			Expect(k8sClient.Create(ctx, testJob)).Should(Succeed())
+
+			/*
+			Adding this Job to our test CronJob should trigger our controller's reconciler logic. After that, we can write
+			a test that evaluates whether our controller eventually updates our CronJob's Status field as expected!
+			*/
+			By("By checking that the CronJob has one active Job")
+			Eventually(func () ([]string, error) {
+				err := k8sClient.Get(ctx, cronjobLookupKey, createdCronjob)
+				if err != nil {
+					return nil, err
+				}
+
+				names := []string{}
+				for _, job := range createdCronjob.Status.Active {
+					names = append(names, job.Name)
+				}
+				return names, nil
+				
+			}, timeout, interval).Should(ConsistOf(JobName)), "should list our active jobs list in status", JobName)
 
 		})
 	})
