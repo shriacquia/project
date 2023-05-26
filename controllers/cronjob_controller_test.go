@@ -114,16 +114,16 @@ var _ = Describe("CronJob controller", func() {
 			}, duration, interval).Should(Equal(0))
 
 			/*
-			Next, we actuall create a stubbed Job that will belong to our CronJob, as well as its downstream template specs.
-			We set the Job's statu "Active" count to 2 to simulate the Job running 2 pods, which means the Job is actively
-			running.
-			We then take the stubbed Job and set its owner reference to point to our test CronJob, This ensures that the 
-			test Job belongs to, and is tracked by, our test CronJob. Once that's done, we create our new Job instance.
+				Next, we actuall create a stubbed Job that will belong to our CronJob, as well as its downstream template specs.
+				We set the Job's statu "Active" count to 2 to simulate the Job running 2 pods, which means the Job is actively
+				running.
+				We then take the stubbed Job and set its owner reference to point to our test CronJob, This ensures that the
+				test Job belongs to, and is tracked by, our test CronJob. Once that's done, we create our new Job instance.
 			*/
 			By("By creating a new Job")
 			testJob := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: JobName,
+					Name:      JobName,
 					Namespace: CronJobNamespace,
 				},
 				Spec: batchv1.JobSpec{
@@ -131,8 +131,10 @@ var _ = Describe("CronJob controller", func() {
 						Spec: v1.PodSpec{
 							//For simplicity we only fill out the required fields.
 							Containers: []v1.Container{
-								Name: "test-container"
-								Image: "test-image"
+								{
+									Name:  "test-container",
+									Image: "test-image",
+								},
 							},
 							RestartPolicy: v1.RestartPolicyOnFailure,
 						},
@@ -144,19 +146,19 @@ var _ = Describe("CronJob controller", func() {
 			}
 
 			// Not that your CronJob's GroupVersionKind is required to set up this owner reference.
-			kind := reflect.TypeOf(cronjobv1.CronJob()).Name()
-			gvk	 := cronjobv1.GroupVersion.WithKind(kind)
+			kind := reflect.TypeOf(cronjobv1.CronJob{}).Name()
+			gvk := cronjobv1.GroupVersion.WithKind(kind)
 
 			controllerRef := metav1.NewControllerRef(createdCronjob, gvk)
 			testJob.SetOwnerReferences([]metav1.OwnerReference{*controllerRef})
 			Expect(k8sClient.Create(ctx, testJob)).Should(Succeed())
 
 			/*
-			Adding this Job to our test CronJob should trigger our controller's reconciler logic. After that, we can write
-			a test that evaluates whether our controller eventually updates our CronJob's Status field as expected!
+				Adding this Job to our test CronJob should trigger our controller's reconciler logic. After that, we can write
+				a test that evaluates whether our controller eventually updates our CronJob's Status field as expected!
 			*/
 			By("By checking that the CronJob has one active Job")
-			Eventually(func () ([]string, error) {
+			Eventually(func() ([]string, error) {
 				err := k8sClient.Get(ctx, cronjobLookupKey, createdCronjob)
 				if err != nil {
 					return nil, err
@@ -167,8 +169,8 @@ var _ = Describe("CronJob controller", func() {
 					names = append(names, job.Name)
 				}
 				return names, nil
-				
-			}, timeout, interval).Should(ConsistOf(JobName)), "should list our active jobs list in status", JobName)
+
+			}, timeout, interval).Should(ConsistOf(JobName), "should list our active job %s in the list of .Status.Active", JobName)
 
 		})
 	})
